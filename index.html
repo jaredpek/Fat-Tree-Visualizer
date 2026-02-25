@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Google Jupiter Network Topology Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.16.0/d3.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #080c14;
+    --panel: #0d1520;
+    --border: #1a2a3a;
+    --accent-blue: #00aaff;
+    --accent-orange: #ff7700;
+    --accent-purple: #aa44ff;
+    --accent-teal: #00ddaa;
+    --accent-green: #44ff88;
+    --text: #c8d8e8;
+    --text-dim: #556677;
+    --text-bright: #eef4ff;
+    --grid: rgba(0,170,255,0.04);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ---- Header ---- */
+  header {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px;
+    color: var(--accent-blue);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  header .subtitle {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .header-badge {
+    margin-left: auto;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-orange);
+    border: 1px solid var(--accent-orange);
+    padding: 3px 8px;
+    letter-spacing: 1px;
+  }
+
+  /* ---- Main layout ---- */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ---- Sidebar ---- */
+  .sidebar {
+    width: 220px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: var(--bg); }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .sidebar-section {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-section-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-blue);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .control-group {
+    margin-bottom: 10px;
+  }
+
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .control-label span {
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--accent-teal);
+  }
+
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--border);
+    outline: none;
+    border-radius: 2px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    cursor: pointer;
+  }
+
+  select {
+    width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    outline: none;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--accent-blue); }
+
+  /* ---- Buttons ---- */
+  .btn {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    margin-bottom: 6px;
+  }
+  .btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+  .btn.active { background: rgba(0,170,255,0.1); border-color: var(--accent-blue); color: var(--accent-blue); }
+  .btn.btn-orange { border-color: var(--accent-orange); color: var(--accent-orange); }
+  .btn.btn-orange:hover { background: rgba(255,119,0,0.1); }
+
+  /* ---- Checkboxes ---- */
+  .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .checkbox-group input { accent-color: var(--accent-blue); }
+  .checkbox-group label { font-size: 11px; color: var(--text-dim); cursor: pointer; }
+
+  /* ---- Canvas area ---- */
+  .canvas-area {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  #viz-container {
+    flex: 1;
+    position: relative;
+  }
+
+  #main-svg, #compare-container {
+    width: 100%;
+    height: 100%;
+  }
+
+  #compare-container {
+    display: none;
+    flex-direction: row;
+  }
+
+  #compare-container.active {
+    display: flex;
+  }
+
+  .compare-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .compare-panel svg {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .compare-panel + .compare-panel {
+    border-left: 1px solid var(--border);
+  }
+
+  .compare-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-align: center;
+    padding: 6px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .compare-panel:first-child .compare-title { color: var(--accent-teal); }
+  .compare-panel:last-child .compare-title { color: var(--accent-orange); }
+
+  /* ---- Stats bar ---- */
+  /* ---- Stats grid ---- */
+  #stats-grid-wrapper {
+    flex-shrink: 0;
+    background: var(--panel);
+  }
+
+  .stats-row {
+    display: flex;
+    align-items: center;
+    justify-items: start;
+    padding: 0 20px;
+    gap: 0;
+  }
+
+  .stats-row-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    line-height: 1.4;
+    text-transform: uppercase;
+    padding-right: 12px;
+    white-space: nowrap;
+    width: 140px;
+  }
+
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px 10px;
+    border-left: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .stat-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-family: 'Share Tech Mono', monospace;
+    white-space: nowrap;
+  }
+
+  .stat-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    color: var(--accent-teal);
+  }
+
+  .stat-value.highlight { color: var(--accent-orange); }
+
+  .stat-sublabel {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  /* ---- OCS status ---- */
+  #ocs-status {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-orange);
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    border: 1px solid rgba(255,119,0,0.3);
+    white-space: nowrap;
+  }
+
+  /* ---- Legend ---- */
+  .legend {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(13,21,32,0.92);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .legend-title {
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    font-size: 9px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    color: var(--text);
+  }
+
+  .legend-node {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-node.diamond {
+    border-radius: 0;
+    transform: rotate(45deg);
+    width: 10px; height: 10px;
+  }
+
+  .legend-node.square {
+    border-radius: 2px;
+  }
+
+  .legend-line {
+    width: 24px; height: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ---- Tooltip ---- */
+  #tooltip {
+    position: fixed;
+    background: rgba(13,21,32,0.96);
+    border: 1px solid var(--accent-blue);
+    padding: 8px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    max-width: 220px;
+    line-height: 1.6;
+  }
+
+  #tooltip .tt-title {
+    color: var(--accent-blue);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  #tooltip .tt-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    color: var(--text-dim);
+  }
+
+  #tooltip .tt-row span:last-child {
+    color: var(--text);
+  }
+
+  /* ---- Animated optical links ---- */
+  @keyframes dash-flow {
+    to { stroke-dashoffset: -20; }
+  }
+
+  .optical-link {
+    animation: dash-flow 0.8s linear infinite;
+  }
+
+  /* ---- Stat metric hover tooltip ---- */
+  .stat-hoverable {
+    cursor: default;
+    border-radius: 2px;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .stat-hoverable:hover {
+    background: rgba(0,170,255,0.07);
+  }
+
+  #stat-tooltip {
+    position: fixed;
+    background: rgba(8,12,20,0.97);
+    border: 1px solid var(--accent-blue);
+    border-left: 3px solid var(--accent-blue);
+    padding: 12px 14px;
+    pointer-events: none;
+    display: none;
+    z-index: 300;
+    width: 300px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  }
+
+  #stat-tooltip-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #stat-tooltip-body {
+    font-family: 'Exo 2', sans-serif;
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre-wrap;
+  }
+
+  #stat-tooltip-body .formula-block {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-teal);
+    background: rgba(0,170,255,0.06);
+    border-left: 2px solid var(--accent-teal);
+    padding: 4px 8px;
+    margin: 6px 0;
+    display: block;
+  }
+
+  /* ---- Legend hover tooltip ---- */
+  .legend-hoverable {
+    cursor: default;
+    border-radius: 2px;
+    transition: background 0.15s;
+    padding: 2px 3px;
+    margin: 0 -3px;
+  }
+  .legend-hoverable:hover {
+    background: rgba(0,170,255,0.07);
+  }
+
+  #legend-tooltip {
+    position: fixed;
+    background: rgba(8,12,20,0.97);
+    border: 1px solid var(--accent-blue);
+    border-left: 3px solid var(--accent-blue);
+    padding: 9px 12px;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--text);
+    pointer-events: none;
+    display: none;
+    z-index: 200;
+    max-width: 240px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+
+  /* ---- Component mapping table ---- */
+  .mapping-row {
+    display: grid;
+    grid-template-columns: 1fr 16px 1fr;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(26,42,58,0.6);
+  }
+
+  .mapping-row.header-row {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+  }
+
+  .mapping-cell {
+    font-size: 10px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1.3;
+  }
+
+  .mapping-arrow {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
+  .mapping-desc {
+    font-size: 9px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    padding: 3px 0 6px 0;
+    border-bottom: 1px solid rgba(26,42,58,0.8);
+    font-style: italic;
+  }
+
+  .mapping-desc:last-child { border-bottom: none; }
+
+  #mapping-table {
+    margin-top: 8px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    max-height: 600px;
+  }
+
+  #mapping-table.collapsed {
+    max-height: 0;
+    margin-top: 0;
+  }
+
+  #mapping-toggle:hover { color: var(--accent-teal); }
+
+  /* ---- Background grid ---- */
+  .bg-grid {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #main-svg { position: relative; z-index: 1; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ HEADER -->
+<header>
+  <div>
+    <h1>⬡ Jupiter Network Visualizer</h1>
+    <div class="subtitle">Google Jupiter Evolving · OCS-Based Datacenter Fabric · SIGCOMM 2022</div>
+  </div>
+  <div class="header-badge">SIGCOMM '22</div>
+</header>
+
+<!-- ============================================================ MAIN -->
+<div class="main">
+
+  <!-- ---- Sidebar ---- -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Topology Params</div>
+
+      <div class="control-group">
+        <div class="control-label">Aggregation Blocks or Pods <span id="val-numAggBlocks">4</span></div>
+        <input type="range" id="numAggBlocks" min="2" max="64" value="4" step="2">
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">ToRs Per Block <span id="val-torsPerBlock">4</span></div>
+        <input type="range" id="torsPerBlock" min="2" max="20" value="4" step="2">
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">Servers Per ToR or Edge <span id="val-serversPerTor">2</span></div>
+        <input type="range" id="serversPerTor" min="2" max="20" value="2" step="1">
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">OCS Radix <span id="val-ocsRadix">128</span></div>
+        <input type="range" id="ocsRadix" min="2" max="128" value="128" step="2">
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">OCS Switches <span id="val-numOcsSwitches">4</span></div>
+        <input type="range" id="numOcsSwitches" min="2" max="20" value="4" step="2">
+      </div>
+
+      <div class="control-group">
+        <div class="control-label" style="margin-bottom:6px;">NIC or Link Speed</div>
+        <select id="nicSpeed">
+          <option value="10">10G</option>
+          <option value="40">40G</option>
+          <option value="100" selected>100G</option>
+          <option value="200">200G</option>
+          <option value="400">400G</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Controls</div>
+      <button class="btn btn-orange" id="btn-rewire">⚡ Rewire OCS</button>
+      <button class="btn" id="btn-compare">⬡ Compare Mode</button>
+      <button class="btn" id="btn-rebuild">↺ Rebuild</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Display</div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="show-sdn" checked>
+        <label for="show-sdn">Show SDN Control Plane</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="show-servers" checked>
+        <label for="show-servers">Show Server Nodes</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="show-control-links" checked>
+        <label for="show-control-links">Show Control Links</label>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:auto;">
+      <div class="sidebar-section-title">Legend</div>
+      <div class="legend-item legend-hoverable" data-desc="Orion SDN Controller — Jupiter's logically centralised software-defined controller. Manages OCS reconfiguration, traffic engineering, and global topology state across the entire fabric.">
+        <div class="legend-node" style="background:#aa44ff;"></div> SDN Controller
+      </div>
+      <div class="legend-item legend-hoverable" data-desc="Optical Circuit Switch — MEMS-based optical switch that physically cross-connects fiber pairs by tilting microscopic mirrors. Reconfigures the AB interconnect topology in ~10ms with near-zero power vs a packet-switching ASIC.">
+        <div class="legend-node diamond" style="background:#ff7700;"></div> OCS Switch
+      </div>
+      <div class="legend-item legend-hoverable" data-desc="Aggregation Block — groups multiple ToR switches and provides uplinks to the OCS layer. Equivalent to a fat-tree pod's aggregation switches. Each AB connects to every OCS via a dedicated fiber port.">
+        <div class="legend-node" style="background:#0088cc;"></div> Agg Block
+      </div>
+      <div class="legend-item legend-hoverable" data-desc="Top-of-Rack Switch — sits at the top of a physical server rack, aggregating all servers within it. Provides uplinks to the parent Aggregation Block. Equivalent to an edge switch in fat-tree.">
+        <div class="legend-node" style="background:#00ddaa;"></div> ToR Switch
+      </div>
+      <div class="legend-item legend-hoverable" data-desc="Server — physical compute node (CPU/GPU machine) running workloads. Connects to its rack's ToR switch via a NIC at the configured speed (40G–400G). The actual source and sink of all datacenter traffic.">
+        <div class="legend-node square" style="background:#445566;"></div> Server
+      </div>
+      <div style="margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
+        <div class="legend-item legend-hoverable" data-desc="Electrical link — standard copper or short-reach optical cable. Used for server↔ToR and ToR↔AggBlock connections. Static, always-on, fixed bandwidth.">
+          <div class="legend-line" style="background:#1a6e6e; height:2px; margin-top:1px;"></div> Electrical
+        </div>
+        <div class="legend-item legend-hoverable" data-desc="AB→OCS Physical Fiber — the static fiber cable permanently plugged into the OCS chassis. One fiber per AB per OCS. These never change; only the internal OCS mirror configuration (circuits) changes on rewire.">
+          <div class="legend-line" style="background:#ff8800; height:2px; margin-top:1px;"></div> AB→OCS Fiber
+        </div>
+        <div class="legend-item legend-hoverable" data-desc="Active Circuit — a currently active optical cross-connect inside an OCS, linking two ABs. The OCS MEMS mirrors physically tilt to connect these two fiber ports. Rewiring reshuffles which AB pairs are connected. Animated to indicate dynamic reconfigurability.">
+          <div class="legend-line" style="border-top:2px dashed #44cc44; height:0;"></div> Active Circuit
+        </div>
+        <div class="legend-item legend-hoverable" data-desc="Control link — logical SDN control plane connection from Orion to every switch. Not a data path — carries only control messages (topology updates, OCS rewire commands, flow rules). Shown as an overlay for clarity.">
+          <div class="legend-line" style="background:#cc44ff; height:1px; margin-top:1px;"></div> Control
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title" style="cursor:pointer; user-select:none;" id="mapping-toggle">
+        Component Mapping ▾
+      </div>
+      <div id="mapping-table">
+        <div class="mapping-row header-row">
+          <div class="mapping-cell" style="color:var(--accent-teal);">Fat-Tree</div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-cell" style="color:var(--accent-orange);">Jupiter</div>
+        </div>
+        <div class="mapping-row">
+          <div class="mapping-cell">
+            <div class="legend-node" style="background:#004466; border:1px solid #0088bb; display:inline-block; vertical-align:middle; border-radius:50%; width:10px; height:10px;"></div>
+            Core Switch
+          </div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-cell">
+            <div class="legend-node diamond" style="background:#cc5500; border:1px solid #ff7700; display:inline-block; vertical-align:middle;"></div>
+            OCS Switch
+          </div>
+        </div>
+        <div class="mapping-desc">Static spine replaced by dynamic optical crossbar. OCS reconfigures circuits in ~10ms vs fixed wiring.</div>
+
+        <div class="mapping-row">
+          <div class="mapping-cell">
+            <div class="legend-node" style="background:#005544; border:1px solid #00bb88; display:inline-block; vertical-align:middle; border-radius:50%; width:10px; height:10px;"></div>
+            Agg Switch
+          </div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-cell">
+            <div class="legend-node" style="background:#0055aa; border:1px solid #00aaff; display:inline-block; vertical-align:middle; border-radius:50%; width:10px; height:10px;"></div>
+            Agg Block
+          </div>
+        </div>
+        <div class="mapping-desc">Fat-tree agg switches per pod become Jupiter aggregation blocks. ABs also absorb the pod concept.</div>
+
+        <div class="mapping-row">
+          <div class="mapping-cell">
+            <div class="legend-node" style="background:#334422; border:1px solid #88aa33; display:inline-block; vertical-align:middle; border-radius:50%; width:10px; height:10px;"></div>
+            Edge Switch
+          </div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-cell">
+            <div class="legend-node" style="background:#006655; border:1px solid #00ddaa; display:inline-block; vertical-align:middle; border-radius:50%; width:10px; height:10px;"></div>
+            ToR Switch
+          </div>
+        </div>
+        <div class="mapping-desc">Both sit directly above servers. Jupiter ToR is rack-local; fat-tree edge spans a pod.</div>
+
+        <div class="mapping-row">
+          <div class="mapping-cell">
+            <div class="legend-node square" style="background:#1a2d3d; border:1px solid #334455; display:inline-block; vertical-align:middle;"></div>
+            Server
+          </div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-cell">
+            <div class="legend-node square" style="background:#1a2d3d; border:1px solid #334455; display:inline-block; vertical-align:middle;"></div>
+            Server
+          </div>
+        </div>
+        <div class="mapping-desc">Identical leaf compute nodes. Jupiter supports heterogeneous NIC speeds (40G–400G).</div>
+
+        <div class="mapping-row">
+          <div class="mapping-cell" style="color:var(--text-dim); font-style:italic;">
+            — (none)
+          </div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-cell">
+            <div class="legend-node" style="background:#6611cc; border:1px solid #aa44ff; display:inline-block; vertical-align:middle; border-radius:50%; width:10px; height:10px;"></div>
+            Orion SDN
+          </div>
+        </div>
+        <div class="mapping-desc">Jupiter-only. Centralised SDN controller managing OCS reconfiguration and traffic engineering.</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ---- Canvas ---- -->
+  <div class="canvas-area">
+    <div id="viz-container">
+      <div class="bg-grid"></div>
+      <svg id="main-svg"></svg>
+      <div id="compare-container">
+        <div class="compare-panel">
+          <div class="compare-title">◀ STANDARD FAT-TREE (k=<span id="ft-k-label-title">4</span>)</div>
+          <svg id="ft-svg"></svg>
+        </div>
+        <div class="compare-panel">
+          <div class="compare-title">GOOGLE JUPITER ▶</div>
+          <svg id="jup-svg"></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats grid wrapper: fat-tree row + jupiter row, columns aligned via CSS grid -->
+    <div id="stats-grid-wrapper">
+
+      <!-- Fat-tree stats row — only visible in compare mode -->
+      <div class="stats-row" id="ft-stats-bar" style="display:none; border-top: 2px solid var(--accent-teal);">
+        <div class="stats-row-label" style="color:var(--accent-teal);">◈ FAT-TREE (k=<span id="ft-k-label">4</span>)</div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Total Servers"
+          data-desc="info"
+          data-stat-desc="Total number of server (compute) nodes in the fabric.\n\nFormula:\nk × (k/2) edge switches × serversPerEdge\n\nwhere k = numAggBlocks (rounded up to nearest even). In a k-ary fat-tree, each pod has k/2 edge switches and each connects to serversPerEdge servers.">
+          <div class="stat-label">Total Servers</div>
+          <div class="stat-value" id="ft-stat-servers">—</div>
+        </div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Total Switches"
+          data-stat-desc="Total number of switching elements in the fabric.\n\nFormula:\ncore + agg + edge\n  core = (k/2)²\n  agg  = k × (k/2)\n  edge = k × (k/2)\n\nA k-ary fat-tree has k pods. Each pod has k/2 aggregation and k/2 edge switches. Core switches = (k/2)² and are shared across all pods.">
+          <div class="stat-label">Total Switches</div>
+          <div class="stat-value" id="ft-stat-switches">—</div>
+        </div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Bisection Bandwidth"
+          data-stat-desc="Maximum simultaneous bandwidth between two equal halves of the network.\n\nFormula:\ncore × (k/2) × linkSpeed\n\nThe bisection cut runs through the core layer. Each core switch has k/2 downlinks (one per pod). Splitting k pods into two halves of k/2 each, every core switch contributes k/2 cross-half links.\n\nlinks cut = (k/2)² × (k/2)">
+          <div class="stat-label">Bisection Bandwidth</div>
+          <div class="stat-value" id="ft-stat-bisection">—</div>
+          <div class="stat-sublabel" id="ft-stat-bisection-links">—</div>
+        </div>
+      </div>
+
+      <!-- Jupiter stats row — always visible -->
+      <div class="stats-row" style="border-top: 2px solid var(--accent-orange);">
+        <div class="stats-row-label" style="color:var(--accent-orange);">⬡ JUPITER</div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Total Servers"
+          data-stat-desc="Total number of server (compute) nodes in the Jupiter fabric.\n\nFormula:\nnumAggBlocks × torsPerBlock × serversPerToR\n\nEach Aggregation Block contains torsPerBlock ToR switches. Each ToR connects to serversPerToR servers.">
+          <div class="stat-label">Total Servers</div>
+          <div class="stat-value" id="stat-servers">—</div>
+        </div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Total Switches"
+          data-stat-desc="Total number of switching elements in Jupiter (excludes SDN controller and servers).\n\nFormula:\nnumAggBlocks + (numAggBlocks × torsPerBlock) + numOcsSwitches\n\nComponents:\n  • numAggBlocks aggregation block switches\n  • numAggBlocks × torsPerBlock ToR switches\n  • numOcsSwitches OCS devices\n\nNote: OCS are optical switches — far lower power than packet-switching ASICs.">
+          <div class="stat-label">Total Switches</div>
+          <div class="stat-value" id="stat-switches">—</div>
+        </div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Bisection Bandwidth"
+          data-stat-desc="Maximum simultaneous bandwidth between two equal halves of the network, assuming optimal OCS wiring.\n\nFormula:\nnumOcsSwitches × circuitsPerOcs × nicSpeed\n\nwhere:\n  circuitsPerOcs = min(⌊ocsRadix/2⌋, ⌊numAggBlocks/2⌋)\n\nWith optimal wiring, all circuits cross the bisection cut — each OCS is configured to pair ABs on opposite halves. circuitsPerOcs is bounded by whichever is the binding constraint: OCS port count (radix/2) or number of AB pairs (numAggBlocks/2).">
+          <div class="stat-label">Bisection Bandwidth</div>
+          <div class="stat-value" id="stat-bisection">—</div>
+          <div class="stat-sublabel" id="stat-bisection-links">—</div>
+        </div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Oversubscription"
+          data-stat-desc="Ratio of total server downlink capacity to total uplink capacity per Aggregation Block.\n\nFormula:\ndownlink / uplink\n  downlink = torsPerBlock × serversPerToR × nicSpeed\n  uplink   = numOcsSwitches × nicSpeed\n\nA ratio of 4:1 means 4 Gbps of server demand competes for every 1 Gbps of uplink. Lower is better. A ratio of 1:1 is non-blocking. Jupiter intentionally runs with oversubscription and relies on OCS rewiring to shift capacity toward hot spots.">
+          <div class="stat-label">Oversubscription</div>
+          <div class="stat-value highlight" id="stat-oversub">—</div>
+        </div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="Power Reduction"
+          data-stat-desc="Estimated power reduction relative to an equivalent k-ary fat-tree, based on the SIGCOMM 2022 Jupiter paper which reports ~41% savings.\n\nFormula:\nmin(41%, spineRemoved/spineEquiv × 41%)\n\nwhere:\n  spineEquiv  = numAggBlocks² / 4  (equivalent fat-tree core switches)\n  spineRemoved = spineEquiv − numOcsSwitches\n\nJupiter replaces power-hungry packet-switching core ASICs with low-power MEMS optical switches. The saving scales proportionally to how many spine switches are eliminated. Capped at 41% (the empirical figure from the paper).">
+          <div class="stat-label">Power Reduction</div>
+          <div class="stat-value" id="stat-power">—</div>
+        </div>
+        <div class="stat-item stat-hoverable"
+          data-stat-title="OCS Coverage"
+          data-stat-desc="OCS radix of 8 >= numAggBlocks of 8, so all ABs have full OCS coverage.">
+          <div id="ocs-status">OCS CONFIG #1</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Legend tooltip -->
+<div id="legend-tooltip"></div>
+
+<!-- Stat metric tooltip -->
+<div id="stat-tooltip">
+  <div id="stat-tooltip-title"></div>
+  <div id="stat-tooltip-body"></div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip">
+  <div class="tt-title" id="tt-title"></div>
+  <!-- Node fields -->
+  <div id="tt-node-fields">
+    <div class="tt-row"><span>Type</span><span id="tt-type"></span></div>
+    <div class="tt-row"><span>ID</span><span id="tt-id"></span></div>
+    <div class="tt-row"><span>Links</span><span id="tt-links"></span></div>
+    <div class="tt-row"><span>Capacity</span><span id="tt-capacity"></span></div>
+  </div>
+  <!-- Link fields -->
+  <div id="tt-link-fields" style="display:none;">
+    <div class="tt-row"><span>From</span><span id="tt-from"></span></div>
+    <div class="tt-row"><span>To</span><span id="tt-to"></span></div>
+    <div class="tt-row"><span>Speed</span><span id="tt-speed"></span></div>
+    <div id="tt-desc" style="margin-top:6px; font-size:10px; color:var(--text-dim); line-height:1.5; border-top:1px solid var(--border); padding-top:6px;"></div>
+  </div>
+</div>
+
+<!-- ============================================================ SCRIPTS -->
+<script>
+// ================================================================
+// SECTION 1: TOPOLOGY BUILDERS
+// ================================================================
+
+/**
+ * Build the Google Jupiter graph model.
+ * Returns { nodes: [], links: [] }
+ */
+function buildJupiterGraph(params) {
+  const { numAggBlocks, torsPerBlock, serversPerTor, ocsRadix, numOcsSwitches, nicSpeedG } = params;
+  const nodes = [];
+  const links = [];
+
+  // SDN Controller (Orion)
+  nodes.push({ id: 'sdn-0', type: 'sdnController', label: 'Orion SDN', layer: 0 });
+
+  // OCS switches
+  for (let o = 0; o < numOcsSwitches; o++) {
+    nodes.push({ id: `ocs-${o}`, type: 'ocs', label: `OCS-${o+1}`, layer: 1, ocsIdx: o });
+  }
+
+  // Aggregation blocks, ToRs, Servers — always built; renderer filters by showServers
+  for (let a = 0; a < numAggBlocks; a++) {
+    nodes.push({ id: `ab-${a}`, type: 'aggBlock', label: `AB-${a+1}`, layer: 2, aggIdx: a });
+
+    for (let t = 0; t < torsPerBlock; t++) {
+      const torId = `tor-${a}-${t}`;
+      nodes.push({ id: torId, type: 'tor', label: `ToR ${a+1}.${t+1}`, layer: 3, aggIdx: a, torIdx: t });
+      links.push({ id: `${torId}--ab-${a}`, source: torId, target: `ab-${a}`, type: 'electrical' });
+
+      for (let s = 0; s < serversPerTor; s++) {
+        const srvId = `srv-${a}-${t}-${s}`;
+        nodes.push({ id: srvId, type: 'server', label: `Srv ${a+1}.${t+1}.${s+1}`, layer: 4, aggIdx: a, torIdx: t, srvIdx: s });
+        links.push({ id: `${srvId}--${torId}`, source: srvId, target: torId, type: 'electrical' });
+      }
+    }
+  }
+
+  // OCS wiring: two distinct link types:
+  //   1. "uplink" — static physical fiber: every AB → every OCS (solid thin lines)
+  //   2. "optical" — active circuit inside OCS: pairs of ABs currently cross-connected (dashed animated)
+  const { abToOcs, circuits } = generateOcsWiring(numAggBlocks, numOcsSwitches, ocsRadix);
+
+  // Static uplinks (AB ↔ OCS physical fiber)
+  abToOcs.forEach((u, i) => {
+    links.push({
+      id: `uplink-${i}`,
+      source: `ab-${u.ab}`,
+      target: `ocs-${u.ocs}`,
+      type: 'uplink'   // new type: always-present physical fiber
+    });
+  });
+
+  // Active circuits: draw as curved lines directly between the two ABs,
+  // annotated with which OCS is routing them (shown in tooltip)
+  circuits.forEach((c, i) => {
+    links.push({
+      id: `circuit-${i}`,
+      source: `ab-${c.a}`,
+      target: `ab-${c.b}`,
+      type: 'optical',
+      viaOcs: c.ocs
+    });
+  });
+
+  // SDN control links (sdn -> all switches)
+  nodes.filter(n => n.type !== 'server' && n.type !== 'sdnController').forEach(n => {
+    links.push({ id: `ctrl-${n.id}`, source: 'sdn-0', target: n.id, type: 'control' });
+  });
+
+  return { nodes, links };
+}
+
+/**
+ * Generate OCS wiring — correct Jupiter model:
+ *
+ * PHYSICAL links (static): each OCS has ocsRadix ports, so it can physically
+ *   connect to at most ocsRadix ABs. If ocsRadix >= numAggBlocks, all ABs connect
+ *   to every OCS (full coverage). If ocsRadix < numAggBlocks, only ocsRadix ABs
+ *   are wired into each OCS (partial coverage — some ABs can't reach that OCS).
+ *
+ * OPTICAL circuits (dynamic, reconfigurable): each OCS cross-connects pairs of
+ *   its connected ABs. Max simultaneous circuits = floor(ocsRadix / 2).
+ *   On "Rewire", the pairing is reshuffled.
+ *
+ * Returns:
+ *   { abToOcs: [{ab, ocs}],          ← static physical uplinks (radix-limited)
+ *     circuits: [{a, b, ocs}] }       ← active optical circuits inside each OCS
+ */
+function generateOcsWiring(numAggBlocks, numOcsSwitches, ocsRadix) {
+  // How many ABs can physically plug into each OCS — capped by radix
+  const portsPerOcs = Math.min(ocsRadix, numAggBlocks);
+
+  // Static uplinks: for each OCS, pick which ABs are physically wired to it.
+  // If radix >= numAggBlocks: all ABs connect (full mesh capability).
+  // If radix < numAggBlocks: randomly assign portsPerOcs ABs to this OCS.
+  const abToOcs = [];
+  const connectedAbsPerOcs = []; // track which ABs are reachable per OCS
+
+  for (let o = 0; o < numOcsSwitches; o++) {
+    let abList;
+    if (portsPerOcs >= numAggBlocks) {
+      // Full coverage: every AB connects to this OCS
+      abList = Array.from({ length: numAggBlocks }, (_, i) => i);
+    } else {
+      // Partial coverage: shuffle and take first portsPerOcs ABs
+      abList = Array.from({ length: numAggBlocks }, (_, i) => i);
+      for (let i = abList.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [abList[i], abList[j]] = [abList[j], abList[i]];
+      }
+      abList = abList.slice(0, portsPerOcs);
+    }
+    connectedAbsPerOcs.push(abList);
+    abList.forEach(ab => abToOcs.push({ ab, ocs: o }));
+  }
+
+  // Active circuits: for each OCS, randomly pair the ABs connected to it.
+  // Max simultaneous circuits = floor(portsPerOcs / 2) since each circuit uses 2 ports.
+  const circuits = [];
+  for (let o = 0; o < numOcsSwitches; o++) {
+    const abIndices = [...connectedAbsPerOcs[o]];
+    // Fisher-Yates shuffle
+    for (let i = abIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [abIndices[i], abIndices[j]] = [abIndices[j], abIndices[i]];
+    }
+    // Pair consecutive elements up to floor(portsPerOcs/2) pairs
+    const maxCircuits = Math.floor(portsPerOcs / 2);
+    for (let p = 0; p < maxCircuits * 2 - 1 && p + 1 < abIndices.length; p += 2) {
+      circuits.push({ a: abIndices[p], b: abIndices[p + 1], ocs: o });
+    }
+  }
+
+  return { abToOcs, circuits };
+}
+
+/**
+ * Build a standard k-ary fat-tree graph.
+ * k must be even. Layers: core (k^2/4 nodes), agg (k^2/2), edge (k^2/2), pods (k)
+ */
+function buildFatTreeGraph(k, serversPerTor) {
+  const nodes = [];
+  const links = [];
+  const numPods = k;
+  const numCore = (k / 2) * (k / 2);
+  const numAggPerPod = k / 2;
+  const numEdgePerPod = k / 2;
+  const numServersPerEdge = serversPerTor || k / 2;  // default to k/2 if not provided
+
+  // Core switches
+  for (let c = 0; c < numCore; c++) {
+    nodes.push({ id: `core-${c}`, type: 'core', label: `Core\n${c+1}`, layer: 0 });
+  }
+
+  // Pods
+  for (let p = 0; p < numPods; p++) {
+    // Aggregation switches
+    for (let a = 0; a < numAggPerPod; a++) {
+      const aggId = `agg-${p}-${a}`;
+      nodes.push({ id: aggId, type: 'ftAgg', label: `Agg\n${p}.${a}`, layer: 1, pod: p });
+      // Connect to core
+      for (let c = 0; c < k/2; c++) {
+        const coreIdx = a * (k / 2) + c;
+        links.push({ id: `core${coreIdx}--${aggId}`, source: `core-${coreIdx}`, target: aggId, type: 'electrical' });
+      }
+    }
+    // Edge switches + servers beneath them
+    for (let e = 0; e < numEdgePerPod; e++) {
+      const edgeId = `edge-${p}-${e}`;
+      nodes.push({ id: edgeId, type: 'ftEdge', label: `Edge\n${p}.${e}`, layer: 2, pod: p, edgeIdx: e });
+      // Connect to all agg switches in pod
+      for (let a = 0; a < numAggPerPod; a++) {
+        links.push({ id: `agg-${p}-${a}--${edgeId}`, source: `agg-${p}-${a}`, target: edgeId, type: 'electrical' });
+      }
+      // Servers: numServersPerEdge per edge switch
+      for (let s = 0; s < numServersPerEdge; s++) {
+        const srvId = `ftsrv-${p}-${e}-${s}`;
+        nodes.push({ id: srvId, type: 'server', label: `Srv ${p}.${e}.${s}`, layer: 3, pod: p, edgeIdx: e, srvIdx: s, numSiblings: numServersPerEdge });
+        links.push({ id: `${srvId}--${edgeId}`, source: srvId, target: edgeId, type: 'electrical' });
+      }
+    }
+  }
+
+  return { nodes, links };
+}
+
+// ================================================================
+// SECTION 2: LAYOUT ENGINE
+// ================================================================
+
+/**
+ * Compute (x, y) positions for all nodes in a layered, hierarchical layout.
+ */
+function computeJupiterLayout(nodes, width, height, params) {
+  const { numAggBlocks, torsPerBlock, serversPerTor, numOcsSwitches } = params;
+  const layerY = [0.06, 0.20, 0.36, 0.57, 0.80].map(f => f * height);
+
+  // Layer 0: SDN (center)
+  nodes.filter(n => n.type === 'sdnController').forEach(n => {
+    n.x = width / 2;
+    n.y = layerY[0];
+  });
+
+  // Layer 1: OCS (evenly spaced)
+  const ocsNodes = nodes.filter(n => n.type === 'ocs');
+  ocsNodes.forEach((n, i) => {
+    n.x = (width * 0.15) + (i / Math.max(ocsNodes.length - 1, 1)) * (width * 0.70);
+    n.y = layerY[1];
+  });
+
+  // Layer 2: AggBlocks (evenly spaced)
+  const abNodes = nodes.filter(n => n.type === 'aggBlock');
+  abNodes.forEach((n, i) => {
+    n.x = (width * 0.05) + (i / Math.max(abNodes.length - 1, 1)) * (width * 0.90);
+    n.y = layerY[2];
+  });
+
+  // Layer 3: ToRs (grouped under their aggBlock)
+  const torNodes = nodes.filter(n => n.type === 'tor');
+  const abSpacing = width * 0.90 / Math.max(abNodes.length - 1, 1);
+  const torSpread = Math.min(abSpacing * 0.8, 160);
+
+  torNodes.forEach(n => {
+    const abNode = abNodes[n.aggIdx];
+    if (!abNode) return;
+    const offset = (n.torIdx - (torsPerBlock - 1) / 2) * (torSpread / Math.max(torsPerBlock - 1, 1));
+    n.x = abNode.x + offset;
+    n.y = layerY[3];
+  });
+
+  // Layer 4: Servers — always positioned (renderer will hide them if showServers is off)
+  const srvNodes = nodes.filter(n => n.type === 'server');
+  const torSpacingForSrv = Math.max(torSpread / Math.max(torsPerBlock - 1, 1), 20);
+  const srvSpread = Math.min(torSpacingForSrv * 0.7, 60);
+  srvNodes.forEach(n => {
+    const abNode = abNodes[n.aggIdx];
+    if (!abNode) return;
+    const torOffset = (n.torIdx - (torsPerBlock - 1) / 2) * (torSpread / Math.max(torsPerBlock - 1, 1));
+    const srvOffset = (n.srvIdx - (serversPerTor - 1) / 2) * (srvSpread / Math.max(serversPerTor - 1, 1));
+    n.x = abNode.x + torOffset + srvOffset;
+    n.y = layerY[4];
+  });
+
+  return nodes;
+}
+
+/**
+ * Compute fat-tree layout
+ */
+function computeFatTreeLayout(nodes, width, height, k) {
+  const numPods = k;
+  const layerY = [height * 0.08, height * 0.30, height * 0.55, height * 0.82];
+
+  // Core
+  const coreNodes = nodes.filter(n => n.type === 'core');
+  coreNodes.forEach((n, i) => {
+    n.x = (width * 0.05) + (i / Math.max(coreNodes.length - 1, 1)) * (width * 0.90);
+    n.y = layerY[0];
+  });
+
+  // Agg & Edge per pod
+  const podWidth = width / numPods;
+  for (let p = 0; p < numPods; p++) {
+    const aggNodes = nodes.filter(n => n.type === 'ftAgg' && n.pod === p);
+    aggNodes.forEach((n, i) => {
+      n.x = p * podWidth + podWidth * (0.2 + i * 0.6 / Math.max(aggNodes.length - 1, 1));
+      n.y = layerY[1];
+    });
+    const edgeNodes = nodes.filter(n => n.type === 'ftEdge' && n.pod === p);
+    edgeNodes.forEach((n, i) => {
+      n.x = p * podWidth + podWidth * (0.2 + i * 0.6 / Math.max(edgeNodes.length - 1, 1));
+      n.y = layerY[2];
+    });
+    // Servers: spread under their parent edge switch
+    edgeNodes.forEach(edgeNode => {
+      const srvNodes = nodes.filter(n => n.type === 'server' && n.pod === p && n.edgeIdx === edgeNode.edgeIdx);
+      const numSrv = srvNodes.length;
+      const spread = Math.min(podWidth * 0.55, numSrv * 14);
+      srvNodes.forEach((n, i) => {
+        n.x = edgeNode.x + (i - (numSrv - 1) / 2) * (numSrv > 1 ? spread / (numSrv - 1) : 0);
+        n.y = layerY[3];
+      });
+    });
+  }
+  return nodes;
+}
+
+// ================================================================
+// SECTION 3: RENDERER
+// ================================================================
+
+// ================================================================
+// LINK TOOLTIP DESCRIPTIONS
+// ================================================================
+
+const linkDescriptions = {
+  electrical: {
+    title: 'Electrical Link',
+    desc: 'Static copper/electrical connection. Carries data between adjacent layers within the same rack or aggregation block. Always present — cannot be reconfigured. Bandwidth = 1 × NIC speed.'
+  },
+  uplink: {
+    title: 'AB→OCS Physical Fiber',
+    desc: 'Fixed optical fiber permanently wired from an Aggregation Block into an OCS chassis port. This is the physical infrastructure — the fiber never moves. The OCS\'s MEMS mirrors then decide which fibers to cross-connect into active circuits.'
+  },
+  optical: {
+    title: 'Active Optical Circuit',
+    desc: 'A dynamic cross-connect established inside the OCS by tilting MEMS mirrors. Connects two Aggregation Blocks for direct high-speed data transfer. Can be rewired in ~10ms by the Orion SDN controller to adapt to traffic demand.'
+  },
+  control: {
+    title: 'SDN Control Link',
+    desc: 'Logical control plane connection from the Orion SDN controller to a switch. Used to push flow rules, trigger OCS reconfiguration, and monitor topology state. Not a data-plane path — carries only control messages.'
+  }
+};
+
+function showLinkTooltip(d, nodeMap, nicSpeedG) {
+  const tooltip = document.getElementById('tooltip');
+  const info = linkDescriptions[d.type] || { title: d.type, desc: '' };
+  const srcId = typeof d.source === 'object' ? d.source.id : d.source;
+  const tgtId = typeof d.target === 'object' ? d.target.id : d.target;
+  const srcLabel = nodeMap[srcId]?.label?.replace('\n', ' ') || srcId;
+  const tgtLabel = nodeMap[tgtId]?.label?.replace('\n', ' ') || tgtId;
+
+  document.getElementById('tt-title').textContent = info.title;
+  document.getElementById('tt-node-fields').style.display = 'none';
+  document.getElementById('tt-link-fields').style.display = 'block';
+  document.getElementById('tt-from').textContent = srcLabel;
+  document.getElementById('tt-to').textContent = tgtLabel;
+  document.getElementById('tt-speed').textContent = `${nicSpeedG}G`;
+  document.getElementById('tt-desc').textContent = info.desc;
+  tooltip.style.display = 'block';
+}
+
+function showNodeTooltip() {
+  document.getElementById('tt-node-fields').style.display = 'block';
+  document.getElementById('tt-link-fields').style.display = 'none';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+function moveTooltip() {
+  const tooltip = document.getElementById('tooltip');
+  tooltip.style.left = (d3.event.pageX + 14) + 'px';
+  tooltip.style.top = (d3.event.pageY - 10) + 'px';
+}
+
+/**
+ * Render a graph (nodes + links) into the given SVG element.
+ * layoutOptions: { showSdn, showControlLinks, showServers }
+ */
+function renderGraph(svgEl, graphData, layoutOptions, isJupiter) {
+  const { nodes, links } = graphData;
+  const { showSdn, showControlLinks, showServers, nicSpeedG } = layoutOptions;
+  const svg = d3.select(svgEl);
+  svg.selectAll('*').remove();
+
+  const W = svgEl.clientWidth || svgEl.parentElement.clientWidth || 900;
+  const H = 750;
+
+  svg
+    .attr("viewBox", `-120 0 ${W+260} ${H}`)
+    .attr("preserveAspectRatio", "xMidYMid meet");
+
+  const g = svg.append('g');
+
+  // Filter nodes/links based on display options
+  const visibleNodes = nodes.filter(n => {
+    if (!showSdn && (n.type === 'sdnController')) return false;
+    if (!showServers && n.type === 'server') return false;
+    return true;
+  });
+
+  const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+
+  const visibleLinks = links.filter(l => {
+    if (l.type === 'control') {
+      // Control links need both SDN node visible AND control links toggled on
+      if (!showSdn || !showControlLinks) return false;
+    }
+    if (!showServers && (typeof l.source === 'string' && l.source.startsWith('srv'))) return false;
+    const srcId = typeof l.source === 'object' ? l.source.id : l.source;
+    const tgtId = typeof l.target === 'object' ? l.target.id : l.target;
+    return visibleNodeIds.has(srcId) && visibleNodeIds.has(tgtId);
+  });
+
+  // Build a node map for link drawing
+  const nodeMap = {};
+  visibleNodes.forEach(n => nodeMap[n.id] = n);
+
+  // Draw links
+  const linkGroup = g.append('g').attr('class', 'links');
+
+  // ---- ELECTRICAL links: server↔tor, tor↔aggBlock ----
+  // Teal, solid
+  linkGroup.selectAll('.link-electrical')
+    .data(visibleLinks.filter(l => l.type === 'electrical'))
+    .enter().append('line')
+    .attr('class', 'link-electrical')
+    .attr('stroke', '#1a6e6e')
+    .attr('stroke-width', 1.5)
+    .attr('opacity', 0.7)
+    .style('cursor', 'crosshair')
+    .attr('x1', d => nodeMap[d.source]?.x || 0)
+    .attr('y1', d => nodeMap[d.source]?.y || 0)
+    .attr('x2', d => nodeMap[d.target]?.x || 0)
+    .attr('y2', d => nodeMap[d.target]?.y || 0)
+    .on('mouseover', d => showLinkTooltip(d, nodeMap, nicSpeedG))
+    .on('mousemove', moveTooltip)
+    .on('mouseout', hideTooltip);
+
+  // ---- UPLINK links: AB → OCS physical fiber ----
+  // Orange, solid (swapped from active circuit color)
+  linkGroup.selectAll('.link-uplink')
+    .data(visibleLinks.filter(l => l.type === 'uplink'))
+    .enter().append('line')
+    .attr('class', 'link-uplink')
+    .attr('stroke', '#ff8800')
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.6)
+    .style('cursor', 'crosshair')
+    .attr('x1', d => nodeMap[d.source]?.x || 0)
+    .attr('y1', d => nodeMap[d.source]?.y || 0)
+    .attr('x2', d => nodeMap[d.target]?.x || 0)
+    .attr('y2', d => nodeMap[d.target]?.y || 0)
+    .on('mouseover', d => showLinkTooltip(d, nodeMap, nicSpeedG))
+    .on('mousemove', moveTooltip)
+    .on('mouseout', hideTooltip);
+
+  // ---- OPTICAL CIRCUIT links: active cross-connects between AB pairs ----
+  // Lime green, animated dashed arcs (swapped from fiber color)
+  // Active circuit arcs bow gently above the AB layer (not up to OCS layer)
+  // since circuits are logical AB↔AB connections — OCS is the switching mechanism, not a waypoint
+  const abLayerY = visibleNodes.find(n => n.type === 'aggBlock')?.y || H * 0.38;
+  const arcBow = abLayerY - H * 0.10; // control point sits just above the AB row
+
+  linkGroup.selectAll('.link-optical')
+    .data(visibleLinks.filter(l => l.type === 'optical'))
+    .enter().append('path')
+    .attr('class', 'link-optical optical-link')
+    .attr('fill', 'none')
+    .attr('stroke', '#44cc44')
+    .attr('stroke-width', 2.5)
+    .attr('stroke-dasharray', '10 4')
+    .attr('opacity', 0.9)
+    .style('cursor', 'crosshair')
+    .attr('d', d => {
+      const sx = nodeMap[d.source]?.x || 0;
+      const sy = nodeMap[d.source]?.y || 0;
+      const tx = nodeMap[d.target]?.x || 0;
+      const ty = nodeMap[d.target]?.y || 0;
+      const cx = (sx + tx) / 2;
+      const dist = Math.abs(tx - sx);
+      const cy = sy - (dist * 0.25);
+      return `M${sx},${sy} Q${cx},${cy} ${tx},${ty}`;
+    })
+    .on('mouseover', d => {
+      // Augment the optical description with which OCS is routing this circuit
+      const info = { ...linkDescriptions.optical };
+      info.desc = `Routed via OCS-${(d.viaOcs || 0) + 1}. ` + info.desc;
+      const srcId = typeof d.source === 'object' ? d.source.id : d.source;
+      const tgtId = typeof d.target === 'object' ? d.target.id : d.target;
+      const srcLabel = nodeMap[srcId]?.label?.replace('\n', ' ') || srcId;
+      const tgtLabel = nodeMap[tgtId]?.label?.replace('\n', ' ') || tgtId;
+      document.getElementById('tt-title').textContent = info.title;
+      document.getElementById('tt-node-fields').style.display = 'none';
+      document.getElementById('tt-link-fields').style.display = 'block';
+      document.getElementById('tt-from').textContent = srcLabel;
+      document.getElementById('tt-to').textContent = tgtLabel;
+      document.getElementById('tt-speed').textContent = `${nicSpeedG}G`;
+      document.getElementById('tt-desc').textContent = info.desc;
+      document.getElementById('tooltip').style.display = 'block';
+    })
+    .on('mousemove', moveTooltip)
+    .on('mouseout', hideTooltip);
+
+  // ---- CONTROL links: SDN → all switches ----
+  // Purple, solid thin
+  if (showControlLinks) {
+    linkGroup.selectAll('.link-control')
+      .data(visibleLinks.filter(l => l.type === 'control'))
+      .enter().append('line')
+      .attr('class', 'link-control')
+      .attr('stroke', '#cc44ff')
+      .attr('stroke-width', 0.8)
+      .attr('opacity', 0.4)
+      .style('cursor', 'crosshair')
+      .attr('x1', d => nodeMap[d.source]?.x || 0)
+      .attr('y1', d => nodeMap[d.source]?.y || 0)
+      .attr('x2', d => nodeMap[d.target]?.x || 0)
+      .attr('y2', d => nodeMap[d.target]?.y || 0)
+      .on('mouseover', d => showLinkTooltip(d, nodeMap, nicSpeedG))
+      .on('mousemove', moveTooltip)
+      .on('mouseout', hideTooltip);
+  }
+
+  // Draw nodes
+  const nodeGroup = g.append('g').attr('class', 'nodes');
+  const tooltip = document.getElementById('tooltip');
+
+  // Count links per node
+  const linkCount = {};
+  visibleLinks.forEach(l => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    linkCount[s] = (linkCount[s] || 0) + 1;
+    linkCount[t] = (linkCount[t] || 0) + 1;
+  });
+
+  const nodeConfig = {
+    sdnController: { size: 20, fill: '#6611cc', stroke: '#aa44ff', strokeW: 3 },
+    ocs:           { size: 25, fill: '#cc5500', stroke: '#ff7700', strokeW: 3 },
+    aggBlock:      { size: 30, fill: '#0055aa', stroke: '#00aaff', strokeW: 3 },
+    tor:           { size: 30,  fill: '#006655', stroke: '#00ddaa', strokeW: 3 },
+    server:        { size: 30,  fill: '#1a2d3d', stroke: '#334455', strokeW: 3 },
+    core:          { size: 30,  fill: '#004466', stroke: '#0088bb', strokeW: 3 },
+    ftAgg:         { size: 30,  fill: '#005544', stroke: '#00bb88', strokeW: 3 },
+    ftEdge:        { size: 30,  fill: '#334422', stroke: '#88aa33', strokeW: 3 },
+  };
+
+  const nodeEls = nodeGroup.selectAll('.node')
+    .data(visibleNodes)
+    .enter().append('g')
+    .attr('class', 'node')
+    .attr('transform', d => `translate(${d.x || 0},${d.y || 0})`)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(d) {
+      const cfg = nodeConfig[d.type] || { r: 6 };
+      const nicSpeedG = parseInt(document.getElementById('nicSpeed').value);
+      const bwMap = { sdnController: 'N/A', ocs: `${parseInt(document.getElementById('ocsRadix').value) * nicSpeedG}G`, aggBlock: `${parseInt(document.getElementById('torsPerBlock').value) * nicSpeedG * parseInt(document.getElementById('serversPerTor').value)}G`, tor: `${parseInt(document.getElementById('serversPerTor').value) * nicSpeedG}G`, server: `${nicSpeedG}G`, core: 'multi-100G', ftAgg: 'multi-link', ftEdge: 'multi-link' };
+      document.getElementById('tt-title').textContent = d.label ? d.label.replace('\n', ' ') : d.id;
+      document.getElementById('tt-type').textContent = d.type;
+      document.getElementById('tt-id').textContent = d.id;
+      document.getElementById('tt-links').textContent = linkCount[d.id] || 0;
+      document.getElementById('tt-capacity').textContent = bwMap[d.type] || '?';
+      tooltip.style.display = 'block';
+    })
+    .on('mousemove', function() {
+      tooltip.style.left = (d3.event.pageX + 14) + 'px';
+      tooltip.style.top = (d3.event.pageY - 10) + 'px';
+    })
+    .on('mouseout', function() { tooltip.style.display = 'none'; });
+
+  // OCS nodes: diamond shape
+  nodeEls.filter(d => d.type === 'ocs').append('rect')
+    .attr('width', d => nodeConfig[d.type].size).attr('height', d => nodeConfig[d.type].size)
+    .attr('x', d => -nodeConfig[d.type].size / 2).attr('y', d => -nodeConfig[d.type].size / 2)
+    .attr('transform', 'rotate(45)')
+    .attr('fill', d => nodeConfig[d.type].fill)
+    .attr('stroke', d => nodeConfig[d.type].stroke)
+    .attr('stroke-width', d => nodeConfig[d.type].strokeW);
+
+  // Server nodes: square
+  nodeEls.filter(d => d.type === 'server').append('rect')
+    .attr('width', d => nodeConfig[d.type].size).attr('height', d => nodeConfig[d.type].size)
+    .attr('x', d => -nodeConfig[d.type].size / 2).attr('y', d => -nodeConfig[d.type].size / 2)
+    .attr('rx', 10)
+    .attr('fill', d => nodeConfig[d.type].fill)
+    .attr('stroke', d => nodeConfig[d.type].stroke)
+    .attr('stroke-width', d => nodeConfig[d.type].strokeW);
+
+  // SDN controller: hexagon path
+  nodeEls.filter(d => d.type === 'sdnController').append('polygon')
+    .attr('points', d => hexPoints(nodeConfig[d.type].size))
+    .attr('fill', d => nodeConfig[d.type].fill)
+    .attr('stroke', d => nodeConfig[d.type].stroke)
+    .attr('stroke-width', d => nodeConfig[d.type].strokeW);
+
+  // All other nodes: circle
+  nodeEls.filter(d => !['ocs','server','sdnController'].includes(d.type)).append('circle')
+    .attr('r', d => nodeConfig[d.type]?.size / 2 || 7)
+    .attr('fill', d => nodeConfig[d.type]?.fill || '#334')
+    .attr('stroke', d => nodeConfig[d.type]?.stroke || '#555')
+    .attr('stroke-width', d => nodeConfig[d.type]?.strokeW || 1.5);
+
+  // Glow for SDN, OCS, AggBlocks
+  nodeEls.filter(d => ['sdnController','ocs','aggBlock','core'].includes(d.type))
+    .append('circle')
+    .attr('r', d => (nodeConfig[d.type]?.size / 2 || 8) + 6)
+    .attr('fill', 'none')
+    .attr('stroke', d => nodeConfig[d.type]?.stroke || '#555')
+    .attr('stroke-width', 0.5)
+    .attr('opacity', 0.3);
+
+  // Labels for non-server nodes
+  nodeEls.filter(d => d.type !== 'server').append('text')
+    .attr('dy', d => {
+      const r = nodeConfig[d.type]?.size / 2 || 8;
+      let offset = 10;
+      if (d.type == 'sdnController') offset += 12;
+      else if (d.type == 'ocs') offset += 7;
+      return r + offset;
+    })
+    .attr('text-anchor', 'middle')
+    .attr('font-family', 'Share Tech Mono, monospace')
+    .attr('font-size', d => d.type === 'sdnController' ? 9 : d.type === 'tor' ? 7 : 8)
+    .attr('fill', d => nodeConfig[d.type]?.stroke || '#888')
+    .text(d => d.label ? d.label.replace('\n', ' ') : '');
+}
+
+function hexPoints(r) {
+  return Array.from({length: 6}, (_, i) => {
+    const a = Math.PI / 180 * (60 * i - 30);
+    return `${r * Math.cos(a)},${r * Math.sin(a)}`;
+  }).join(' ');
+}
+
+// ================================================================
+// SECTION 4: OCS REWIRING
+// ================================================================
+
+let ocsConfigNum = 1;
+
+/**
+ * Animate OCS rewiring: fade out old optical links, rebuild graph, fade in new ones.
+ */
+function animateOcsRewire(svgEl, params, layoutOptions) {
+  const svg = d3.select(svgEl);
+  const optLinks = svg.selectAll('.link-optical');
+
+  optLinks.transition().duration(400).attr('opacity', 0).on('end', () => {
+    ocsConfigNum++;
+    document.getElementById('ocs-status').textContent = `OCS CONFIG #${ocsConfigNum}`;
+
+    const newGraph = buildJupiterGraph(params);
+    const W = svgEl.clientWidth || 900;
+    const H = svgEl.clientHeight || 600;
+    computeJupiterLayout(newGraph.nodes, W, H, params);
+
+    renderGraph(svgEl, newGraph, layoutOptions, true);
+    updateStats(newGraph, params);
+
+    // Fade new optical links in
+    d3.select(svgEl).selectAll('.link-optical')
+      .attr('opacity', 0)
+      .transition().duration(500).attr('opacity', 0.7);
+  });
+}
+
+// ================================================================
+// SECTION 5: STATS UPDATER
+// ================================================================
+
+function updateStats(graphData, params) {
+  const { numAggBlocks, torsPerBlock, serversPerTor, ocsRadix, numOcsSwitches, nicSpeedG, showServers } = params;
+  const totalServers = numAggBlocks * torsPerBlock * serversPerTor;
+  const totalSwitches = numAggBlocks + numAggBlocks * torsPerBlock + numOcsSwitches;
+
+  // Bisection BW: assumes optimal OCS wiring where every circuit crosses the bisection cut.
+  // With optimal configuration, all circuitsPerOcs circuits per OCS connect an AB on the
+  // left half to an AB on the right half — this is the definition of bisection bandwidth
+  // (maximum simultaneous cross-traffic between two equal halves).
+  // linksCut = total circuits that cross the bisection plane = numOcsSwitches × circuitsPerOcs
+  const circuitsPerOcs = Math.min(Math.floor(ocsRadix / 2), Math.floor(numAggBlocks / 2));
+  const linksCut = numOcsSwitches * circuitsPerOcs;
+  const bisectionBW = linksCut * nicSpeedG;
+  const bisectionStr = bisectionBW >= 1000 ? `${(bisectionBW/1000).toFixed(1)} Tbps` : `${bisectionBW} Gbps`;
+
+  // Oversubscription: servers per aggBlock / uplinks from aggBlock
+  const downlinkCapPerAB = torsPerBlock * serversPerTor * nicSpeedG;
+  const uplinkCapPerAB = numOcsSwitches * nicSpeedG;
+  const oversub = (downlinkCapPerAB / uplinkCapPerAB).toFixed(1);
+
+  // Power reduction vs equivalent fat-tree with spine switches
+  // Jupiter '22 paper: 41% reduction relative to Clos spine
+  // Scale: if we have fewer OCS than equivalent spine switches, power savings scale
+  const spineEquiv = numAggBlocks * numAggBlocks / 4;
+  const spineRemoved = Math.max(0, spineEquiv - numOcsSwitches);
+  const powerSaving = Math.min(41, (spineRemoved / spineEquiv * 41)).toFixed(0);
+
+  // Radix coverage warning
+  const ocsStatusEl = document.getElementById('ocs-status');
+  if (ocsRadix < numAggBlocks) {
+    ocsStatusEl.style.color = '#ff4444';
+    ocsStatusEl.style.borderColor = 'rgba(255,68,68,0.4)';
+    ocsStatusEl.parentElement.setAttribute('data-stat-desc', `OCS radix of ${ocsRadix} < numAggBlocks of ${numAggBlocks}, so some ABs have partial OCS coverage.`);
+    // ocsStatusEl.title = `OCS radix (${ocsRadix}) < numAggBlocks (${numAggBlocks}): some ABs have partial OCS coverage`;
+  } else {
+    ocsStatusEl.style.color = '';
+    ocsStatusEl.style.borderColor = '';
+    ocsStatusEl.parentElement.setAttribute('data-stat-desc', `OCS radix of ${ocsRadix} >= numAggBlocks of ${numAggBlocks}, so all ABs have full OCS coverage.`);
+  }
+  document.getElementById('stat-servers').textContent = totalServers.toLocaleString();
+  document.getElementById('stat-switches').textContent = totalSwitches.toLocaleString();
+  document.getElementById('stat-bisection').textContent = bisectionStr;
+  document.getElementById('stat-bisection-links').textContent = `${linksCut} link${linksCut !== 1 ? 's' : ''} cut`;
+  document.getElementById('stat-oversub').textContent = `${oversub}:1`;
+  document.getElementById('stat-power').textContent = `-${powerSaving}%`;
+}
+
+function updateFatTreeStats(params) {
+  const { numAggBlocks, serversPerTor, nicSpeedG } = params;
+  const k = numAggBlocks % 2 === 0 ? numAggBlocks : numAggBlocks + 1;
+
+  const ftCore          = (k / 2) * (k / 2);
+  const ftAgg           = k * (k / 2);
+  const ftEdge          = k * (k / 2);
+  const ftTotalSwitches = ftCore + ftAgg + ftEdge;
+  const ftTotalServers  = ftEdge * serversPerTor;
+
+  // Bisection cut runs through core layer.
+  // Each core switch contributes k/2 cross-half links.
+  const ftLinksCut    = ftCore * (k / 2);
+  const ftBisectionBW = ftLinksCut * nicSpeedG;
+  const ftBisectionStr = ftBisectionBW >= 1000
+    ? `${(ftBisectionBW / 1000).toFixed(1)} Tbps`
+    : `${ftBisectionBW} Gbps`;
+
+  document.getElementById('ft-stat-servers').textContent = ftTotalServers.toLocaleString();
+  document.getElementById('ft-stat-switches').textContent = ftTotalSwitches.toLocaleString();
+  document.getElementById('ft-stat-bisection').textContent = ftBisectionStr;
+  document.getElementById('ft-stat-bisection-links').textContent = `${ftLinksCut} link${ftLinksCut !== 1 ? 's' : ''} cut`;
+}
+
+// ================================================================
+// SECTION 6: UI & INIT
+// ================================================================
+
+let currentGraph = null;
+let compareMode = false;
+let currentParams = {};
+
+function getParams() {
+  return {
+    numAggBlocks: parseInt(document.getElementById('numAggBlocks').value),
+    torsPerBlock: parseInt(document.getElementById('torsPerBlock').value),
+    serversPerTor: parseInt(document.getElementById('serversPerTor').value),
+    ocsRadix: parseInt(document.getElementById('ocsRadix').value),
+    numOcsSwitches: parseInt(document.getElementById('numOcsSwitches').value),
+    nicSpeedG: parseInt(document.getElementById('nicSpeed').value),
+    showServers: document.getElementById('show-servers').checked,
+  };
+}
+
+function getLayoutOptions() {
+  return {
+    showSdn: document.getElementById('show-sdn').checked,
+    showControlLinks: document.getElementById('show-control-links').checked,
+    showServers: document.getElementById('show-servers').checked,
+    nicSpeedG: parseInt(document.getElementById('nicSpeed').value),
+  };
+}
+
+function rebuild() {
+  const params = getParams();
+  const layoutOptions = getLayoutOptions();
+  currentParams = params;
+
+  if (compareMode) {
+    renderCompare(params, layoutOptions);
+  } else {
+    const svgEl = document.getElementById('main-svg');
+    const W = svgEl.clientWidth || svgEl.parentElement.clientWidth || 1000;
+    const H = svgEl.clientHeight || svgEl.parentElement.clientHeight || 550;
+
+    const graph = buildJupiterGraph(params);
+    computeJupiterLayout(graph.nodes, W, H, params);
+    currentGraph = graph;
+
+    renderGraph(svgEl, graph, layoutOptions, true);
+    updateStats(graph, params);
+  }
+}
+
+function renderCompare(params, layoutOptions) {
+  // Derive k for fat-tree from numAggBlocks; k must be even
+  const k = params.numAggBlocks % 2 === 0 ? params.numAggBlocks : params.numAggBlocks + 1;
+
+  // Fat-tree side
+  const ftSvgEl = document.getElementById('ft-svg');
+  const ftW = ftSvgEl.clientWidth || ftSvgEl.parentElement.clientWidth || 500;
+  const ftH = ftSvgEl.clientHeight || ftSvgEl.parentElement.clientHeight || 500;
+  const ftGraph = buildFatTreeGraph(k, params.serversPerTor);
+  computeFatTreeLayout(ftGraph.nodes, ftW, ftH, k);
+  renderGraph(ftSvgEl, ftGraph, { showSdn: false, showControlLinks: false, showServers: layoutOptions.showServers }, false);
+
+  // Update the k value in both the compare title and the stats bar label
+  document.getElementById('ft-k-label').textContent = k;
+  document.getElementById('ft-k-label-title').textContent = k;
+
+  // Jupiter side — use live layoutOptions from checkboxes
+  const jupSvgEl = document.getElementById('jup-svg');
+  const jupW = jupSvgEl.clientWidth || jupSvgEl.parentElement.clientWidth || 500;
+  const jupH = jupSvgEl.clientHeight || jupSvgEl.parentElement.clientHeight || 500;
+  const jupGraph = buildJupiterGraph(params);
+  computeJupiterLayout(jupGraph.nodes, jupW, jupH, params);
+  renderGraph(jupSvgEl, jupGraph, layoutOptions, true);
+
+  updateStats(jupGraph, params);
+  updateFatTreeStats(params);
+}
+
+function initUI() {
+  // Slider listeners
+  ['numAggBlocks','torsPerBlock','serversPerTor','ocsRadix','numOcsSwitches'].forEach(id => {
+    const el = document.getElementById(id);
+    const valEl = document.getElementById(`val-${id}`);
+    el.addEventListener('input', () => {
+      valEl.textContent = el.value;
+      rebuild();
+    });
+  });
+
+  document.getElementById('nicSpeed').addEventListener('change', rebuild);
+  document.getElementById('show-sdn').addEventListener('change', rebuild);
+  document.getElementById('show-servers').addEventListener('change', rebuild);
+  document.getElementById('show-control-links').addEventListener('change', rebuild);
+
+  // Rewire OCS
+  document.getElementById('btn-rewire').addEventListener('click', () => {
+    if (compareMode) return;
+    animateOcsRewire(
+      document.getElementById('main-svg'),
+      currentParams,
+      getLayoutOptions()
+    );
+  });
+
+  // Compare mode
+  document.getElementById('btn-compare').addEventListener('click', () => {
+    compareMode = !compareMode;
+    const btn = document.getElementById('btn-compare');
+    const mainSvg = document.getElementById('main-svg');
+    const compareDiv = document.getElementById('compare-container');
+    const ftStatsBar = document.getElementById('ft-stats-bar');
+
+    if (compareMode) {
+      btn.classList.add('active');
+      mainSvg.style.display = 'none';
+      compareDiv.classList.add('active');
+      ftStatsBar.style.display = 'flex';
+      renderCompare(getParams(), getLayoutOptions());
+    } else {
+      btn.classList.remove('active');
+      mainSvg.style.display = '';
+      compareDiv.classList.remove('active');
+      ftStatsBar.style.display = 'none';
+      rebuild();
+    }
+  });
+
+  // Rebuild
+  document.getElementById('btn-rebuild').addEventListener('click', rebuild);
+
+  // Stat metric hover tooltips
+  const statTip = document.getElementById('stat-tooltip');
+  const statTipTitle = document.getElementById('stat-tooltip-title');
+  const statTipBody = document.getElementById('stat-tooltip-body');
+
+  function renderStatTooltipBody(rawDesc) {
+    // Split on \n, detect lines starting with spaces as formula lines
+    const lines = rawDesc.split('\\n');
+    let html = '';
+    let inFormula = false;
+    let formulaLines = [];
+
+    function flushFormula() {
+      if (formulaLines.length) {
+        html += `<span class="formula-block">${formulaLines.join('\n')}</span>`;
+        formulaLines = [];
+      }
+      inFormula = false;
+    }
+
+    lines.forEach(line => {
+      const isFormula = /^  /.test(line) && line.trim().length > 0;
+      if (isFormula) {
+        inFormula = true;
+        formulaLines.push(line.trim());
+      } else {
+        if (inFormula) flushFormula();
+        if (line.trim() === '') {
+          html += '<br>';
+        } else {
+          html += `<span>${line}</span><br>`;
+        }
+      }
+    });
+    if (inFormula) flushFormula();
+    return html;
+  }
+
+  document.querySelectorAll('.stat-hoverable').forEach(el => {
+    el.addEventListener('mouseenter', e => {
+      const title = el.getAttribute('data-stat-title');
+      const desc  = el.getAttribute('data-stat-desc');
+      if (!title || !desc) return;
+      statTipTitle.textContent = title;
+      statTipBody.innerHTML = renderStatTooltipBody(desc);
+      statTip.style.display = 'block';
+    });
+    el.addEventListener('mousemove', e => {
+      const tipW = 300, tipH = statTip.offsetHeight;
+      const left = e.clientX + 16 + tipW > window.innerWidth ? e.clientX - tipW - 8 : e.clientX + 16;
+      const top  = e.clientY + tipH + 10 > window.innerHeight ? e.clientY - tipH - 8 : e.clientY + 10;
+      statTip.style.left = left + 'px';
+      statTip.style.top  = top  + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      statTip.style.display = 'none';
+    });
+  });
+
+  // Legend item hover tooltips
+  const legendTip = document.getElementById('legend-tooltip');
+  document.querySelectorAll('.legend-hoverable').forEach(el => {
+    el.addEventListener('mouseenter', e => {
+      const desc = el.getAttribute('data-desc');
+      if (!desc) return;
+      legendTip.textContent = desc;
+      legendTip.style.display = 'block';
+    });
+    el.addEventListener('mousemove', e => {
+      const tipW = 240;
+      const left = e.clientX + 16 + tipW > window.innerWidth
+        ? e.clientX - tipW - 8
+        : e.clientX + 16;
+      legendTip.style.left = left + 'px';
+      legendTip.style.top = (e.clientY - 10) + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      legendTip.style.display = 'none';
+    });
+  });
+
+  // Mapping table collapse toggle
+  document.getElementById('mapping-toggle').addEventListener('click', () => {
+    const table = document.getElementById('mapping-table');
+    const toggle = document.getElementById('mapping-toggle');
+    const collapsed = table.classList.toggle('collapsed');
+    toggle.textContent = `Component Mapping ${collapsed ? '▸' : '▾'}`;
+  });
+
+  // Initial render
+  rebuild();
+}
+
+// ================================================================
+// BOOT
+// ================================================================
+window.addEventListener('load', () => {
+  initUI();
+
+  // Re-render on window resize
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(rebuild, 200);
+  });
+});
+</script>
+</body>
+</html>
